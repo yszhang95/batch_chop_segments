@@ -415,3 +415,34 @@ torch.cuda.synchronize()`, which yields 7.37 μs ± 7.67 ns per loop.
 - Results
   - numpy: 240ms
   - torch on CPU: 330ms
+## Function `torch.vmap` does not work as of today.
+We attempt to define a function for each step and vectorize it using
+[torch.vmap](https://pytorch.org/docs/stable/generated/torch.vmap.html) along batch dimension:
+```
+def chop_seg(seg, n):
+    idxs = torch.arange(n+1) / n
+    xs = seg[0] * (1-idxs) + seg[3] * idxs
+    ys = seg[1] * (1-idxs) + seg[4] * idxs
+    zs = seg[2] * (1-idxs) + seg[5] * idxs
+    return torch.stack([xs[:-1], ys[:-1], zs[:-1], xs[1:], ys[1:], zs[1:]], dim=1).view(-1, 6)
+chop = torch.vmap(chop)
+```
+or
+```
+def chop_seg(seg, n):
+    xs = torch.linspace(seg[0], seg[3], n)
+    ys = torch.linspace(seg[1], seg[4], n)
+    zs = torch.linspace(seg[2], seg[5], n)
+    return torch.stack([xs[:-1], ys[:-1], zs[:-1], xs[1:], ys[1:], zs[1:]], dim=1).view(-1, 6)
+chop = torch.vmap(chop)
+```
+Unfortunately, function [torch.arange](https://pytorch.org/docs/stable/generated/torch.arange.html)
+and [torch.linspac](https://pytorch.org/docs/stable/generated/torch.linspace.html)e require scalar inputs, rather than a tensor, for some arguments.
+Method `torch.vmap` does not support scalar. We encounter the problem as of today.
+```
+RuntimeError: vmap: It looks like you're calling .item() on a Tensor. We don't support vmap over calling .item() on a Tensor, please try to rewrite what you're doing with other operations. If error is occurring somewhere inside PyTorch internals, please file a bug report.
+```
+A [GitHub issue](https://github.com/pytorch/pytorch/issues/105494) is linked here.
+
+A another try is to have `idxs = torch.torch(tuple(i for i in range(n+1))) / n`.
+But it will return `RuntimeError: all inputs of range must be ints, found Tensor in argument 0`.
