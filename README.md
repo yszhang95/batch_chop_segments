@@ -573,3 +573,15 @@ In the for-loop based solution, we have data-dependent control flow, as `torch.l
     - on CPU: 131.86 ms
     - on GPU: Median: 624.88 ms
     - Performance is very close to `torch_chop_script`.
+### Indexing on pre-allocated tensor and concatenating list of tensors
+Studies are done in [torch_chop_compile4.py](torch_chop_compile4.py),
+[torch_chop_compile.py](torch_chop_compile.py), and
+[torch_chop_compile2.py](torch_chop_compile2.py).
+
+Stack, and concatenating list of tensors is faster than indexing over
+pre-allocated tensors. This is opposite to numpy/numba.
+
+### Recursive compilation and graph breaks
+Studies are in [torch_chop_compile5.py](torch_chop_compile5.py). As
+expected, compilation is done recursively by default. No differences
+observed w.r.t [torch_chop_compile.py](torch_chop_compile.py).
