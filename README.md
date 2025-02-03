@@ -130,8 +130,10 @@ The vectorized way needs additional calculations and indexing but for-loop is in
             return
             
 - Test data
+    ```python
         X = torch.rand((1000,2))
         Y = np.random.rand(2000).reshape(1000, 2)
+    ```
 - Test platform
   - CPU: AMD Ryzen Threadripper 7970X 32-Cores
   - GeForce RTX 4090.
