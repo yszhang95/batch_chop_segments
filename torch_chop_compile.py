@@ -207,6 +207,7 @@ def test_device(device):
     except Exception as e:
         print('Failed to rerun chop_torch_optimized_script for X0X1[:8_000] on', X0X1new.device)
         print(e)
+    print(chop_torch_script.graph_for(X0X1new, Nsnew))
 
 if __name__ == '__main__':
     test_device(device='cpu')

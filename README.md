@@ -500,9 +500,9 @@ There are two ways to compile a graph in
 - script: it compile the graph using static data type and is able to
   handle control flow. But it only works with a subset of python
   features.
-  
-#### for-loop is unrolled
-See [page](torch_cjit_chop.py).
+
+#### Small for-loop or a subset of a large loop is unrolled
+See [blog](https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/) and [page](https://pytorch.org/docs/stable/jit.html#interpreting-graphs).
 
 Tests are available in [torch_chop_compile2.py](torch_chop_compile2.py) and [torch_chop_compile3.py](torch_chop_compile3.py).
 Test data are from `common_dataset.py`.
@@ -532,7 +532,9 @@ Test functions and results are:
 - `torch_chop2_script`: by torch.jit.script
   - CPU: Median 351.37 ms
   - GPU: 1.44s
-  
+
+It is also worth inspecting the graph in `torch_chop_compile2.py`, which directly shows the unrolling of small sized for-loop.
+
 ### Custom C++ extensions and CUDA kernels
 Read more in [page](https://pytorch.org/tutorials/advanced/cpp_extension.html).
 The performance is not fully optimized without writing CUDA kernels...

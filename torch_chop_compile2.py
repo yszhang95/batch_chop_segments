@@ -91,6 +91,8 @@ def test_device(device):
         chop_torch_script2(X0X1new, Nsnew, results)
     print(t4.blocked_autorange(min_run_time=1))
 
+    print(chop_torch_script.graph_for(X0X1new, Nsnew))
+
 if __name__ == '__main__':
     test_device(device='cpu')
     test_device(device='cuda:0')
