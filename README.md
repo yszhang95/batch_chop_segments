@@ -1,8 +1,11 @@
-= G4Step division in a vectorized way
-== Algorithm
-=== Requirements:
-A step will be dividied to smaller pieces when its length larger than a threshold. The new steps have a length smaller than or equal to threshold.
-=== Algorithm
+# G4Step division in a vectorized way
+## Algorithm
+### Input and output
+Input data is an array of steps, in a size of (N, 6).
+A step, (1,6), will be divided to smaller pieces when its length larger than a threshold.
+The new steps have a length smaller than or equal to threshold.
+It is not guaranteed that each original step yields the same number of divisions given the threshold.
+### Algorithm
 - Compute the length of each step
 - Compute the number of division for each step, given a universal threshold.
   - Steps shorter than the threshold are kept.
@@ -56,85 +59,87 @@ def chop_torch_optimized(X0X1, Ns):
 ```
 See files for [numpy](npnb_jit_chop.py) and [torch](torch_chop_compile.py).
 
-== Numba and numpy
+## Numba and numpy
 numba has supports to numpy, including
 - [numpy.linspace](https://numba.pydata.org/numba-doc/dev/developer/autogen_numpy_listing.html?highlight=linspace#numpy.core.function_base.linspace)
 - [efficient index accessing](https://numba.pydata.org/numba-doc/dev/reference/numpysupported.html#:~:text=NumPy%20arrays%20are%20directly%20supported%20in%20Numba.%20Access%20to%20Numpy%20arrays%20is%20very%20efficient%2C%20as%20indexing%20is%20lowered%20to%20direct%20memory%20accesses%20when%20possible.)
 
-== Numpy and torch
-=== for-loop based indexing for one input
-==== Test function
-```
-def idx(X):
-    for i in range(len(X)):
-        X[i]
-    return
-```
-==== Test data
-```
-X = torch.rand((1000,2))
-X = torch.rand((1_000, 6))
-Y = np.random.rand(2000).reshape(1000, 2)
-```
-==== Test platform
-- CPU: AMD Ryzen Threadripper 7970X 32-Cores
-- GeForce RTX 4090.
-==== Result
-- numba: 103 ns ± 0.273 ns per loop
-- numpy: 55.3 μs ± 249 ns per loop
-- torch on CPU, input (1000, 2): 635 μs ± 1.17 μs per loop
-- torch on CPU, input (1000, 6): 676 μs ± 412 ns per loop
-- torch on GPU: 779 μs ± 559 ns per loop
-==== Observation
-JITed version by numba is the fastest. Numpy indexing is faster than torch indexing on the first axis. Torch on GPU is the slowest.
+Tests are performed in [npnb_jit_chop.py](npnb_jit_chop.py).
+- Function `chop_np`: 225.37532029673457 ms for 1 runs.
+  - It consists of a for-loop and assigning new steps to a preloaded array.
+- Function `chop_nb`: 0.7169480174779892 ms for 500 runs.
+  - It is a compiled version of `chop_np`.
+- Function `chop_np2`: 237.9163159057498 ms for 1 run
+  - It consists of a for-loop and concatenating the temporary arrays at the last step.
+- Function `chop_np_optimized`: 0.9392065620049834 ms for 500 runs
+  - It is the vectorized version without for-loop.
+The vectorized way of `chop_np_optimized` has a performance close to compiled version. This is consistent with expectation.
+The vectorized way needs additional calculations and indexing but for-loop is in absence.
 
-=== for-loop based indexing for two inputs
-==== Test function
-```
-def idx(X):
-    for i in range(len(X)):
-        X[i]
-        Y[i]
-    return
-```
-==== Test data
-```
-X = torch.rand((1000, 2))
-Y = torch.rand((1000, ))
-```
-==== Test platform
-- CPU: AMD Ryzen Threadripper 7970X 32-Cores
-- GeForce RTX 4090
-==== Result
-- numba: 130 ns ± 0.175 ns
-- numpy: 79.5 μs ± 667 ns per loop
-- torch on CPU: 1.34 ms ± 1.42 μs per loop
-==== Observation
-Runtime increases for both numpy and torch. Runtime become double for torch.
+## Numpy and torch
+### for-loop based indexing for one input
+- Test function
+        def idx(X):
+            for i in range(len(X)):
+                X[i]
+            return
+- Test data
+        X = torch.rand((1000,2))
+        X = torch.rand((1_000, 6))
+        Y = np.random.rand(2000).reshape(1000, 2)
+- Test platform
+  - CPU: AMD Ryzen Threadripper 7970X 32-Cores
+  - GeForce RTX 4090.
+- Result
+  - numba: 103 ns ± 0.273 ns per loop
+  - numpy: 55.3 μs ± 249 ns per loop
+  - torch on CPU, input (1000, 2): 635 μs ± 1.17 μs per loop
+  - torch on CPU, input (1000, 6): 676 μs ± 412 ns per loop
+  - torch on GPU: 779 μs ± 559 ns per loop
+- Observation
+  - JITed version by numba is the fastest. Numpy indexing is faster
+    than torch indexing on the first axis. Torch on GPU is the
+    slowest.
 
-=== for-loop based indexing for 2D input
-==== Test function
-```
-def idx(X):
-    for i in range(len(X)):
-        X[i,0]
-    return
-```
-==== Test data
-```
-X = torch.rand((1000,2))
-Y = np.random.rand(2000).reshape(1000, 2)
-```
-==== Test platform
-- CPU: AMD Ryzen Threadripper 7970X 32-Cores
-- GeForce RTX 4090.
-==== Result
-- numba: 102 ns ± 0.418 ns per loop
-- numpy: 53.7 μs ± 667 ns per loop
-- torch on CPU: 1.3 ms ± 367 ns per loop
-- torch on GPU: 1.46 ms ± 3.82 μs per loop
-==== Observation
-Runtime for numpy does not vary too much. Runtime for torch become double.
+### for-loop based indexing for two inputs
+- Test function
+        def idx(X):
+            for i in range(len(X)):
+                X[i]
+                Y[i]
+            return
+- Test data
+        X = torch.rand((1000, 2))
+    Y = torch.rand((1000, ))
+- Test platform
+  - CPU: AMD Ryzen Threadripper 7970X 32-Cores
+  - GeForce RTX 4090
+- Result
+  - numba: 130 ns ± 0.175 ns
+  - numpy: 79.5 μs ± 667 ns per loop
+  - torch on CPU: 1.34 ms ± 1.42 μs per loop
+- Observation
+  - Runtime increases for both numpy and torch. Runtime become double for torch.
+
+### for-loop based indexing for 2D input
+- Test function
+        def idx(X):
+            for i in range(len(X)):
+                X[i,0]
+            return
+- Test data
+        X = torch.rand((1000,2))
+        Y = np.random.rand(2000).reshape(1000, 2)
+- Test platform
+  - CPU: AMD Ryzen Threadripper 7970X 32-Cores
+  - GeForce RTX 4090.
+- Result
+  - numba: 102 ns ± 0.418 ns per loop
+  - numpy: 53.7 μs ± 667 ns per loop
+  - torch on CPU: 1.3 ms ± 367 ns per loop
+  - torch on GPU: 1.46 ms ± 3.82 μs per loop
+- Observation
+  - Runtime for numpy does not vary too much. Runtime for torch become double.
 
 === for-loop based indexing for two input
 ==== Test function
