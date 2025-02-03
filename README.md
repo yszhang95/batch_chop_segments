@@ -123,10 +123,12 @@ The vectorized way needs additional calculations and indexing but for-loop is in
 
 ### for-loop based indexing for 2D input
 - Test function
+
         def idx(X):
             for i in range(len(X)):
                 X[i,0]
             return
+            
 - Test data
         X = torch.rand((1000,2))
         Y = np.random.rand(2000).reshape(1000, 2)
