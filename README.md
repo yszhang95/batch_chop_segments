@@ -452,6 +452,9 @@ A [GitHub issue](https://github.com/pytorch/pytorch/issues/105494) is linked her
 A another try is to have `idxs = torch.torch(tuple(i for i in range(n+1))) / n`.
 But it will return `RuntimeError: all inputs of range must be ints, found Tensor in argument 0`.
 
+### Does preallocated array helps? No for torch...
+We already see
+
 ## torch and JIT
 ### The active project: torch.compile
 The library
@@ -489,7 +492,6 @@ compiled_fn = torch.compile(fn, fullgraph=True)
 
 Read more in [FAQ](https://pytorch.org/docs/stable/torch.compiler_faq.html).
 
-
 ### The legacy way: TorchScript
 There are two ways to compile a graph in
 [TorchScript](https://pytorch.org/tutorials/beginner/Intro_to_TorchScript_tutorial.html).
@@ -499,12 +501,44 @@ There are two ways to compile a graph in
   handle control flow. But it only works with a subset of python
   features.
   
+#### for-loop is unrolled
+See [page](torch_cjit_chop.py).
+
+Tests are available in [torch_chop_compile2.py](torch_chop_compile2.py) and [torch_chop_compile3.py](torch_chop_compile3.py).
+Test data are from `common_dataset.py`.
+Test functions and results are:
+- `torch_chop`: results are pre-allocated and in-place assignments are
+  done per iteration. In-place assignments are done in for-loop.
+  - CPU: Median: 453.27 ms
+  - GPU: 2.02s
+- `torch_chop`: with unrolled loop:
+  - CPU: Median: 442.06 ms
+  - GPU Median: 2s
+- `torch_chop2`: results are pre-allocated and in-place assignments
+  are done per iteration. CUDA sync are also called per
+  iteration. In-place assignments are done in for-loop.
+- `torch_chop_compile`: by torch.compile
+  - CPU: Median 452.18 ms
+  - GPU: 2.03s
+- `torch_chop_compile` in `torch_chop_compile3.py`, with unrolled loop
+  - CPU: Median: 439.55 ms
+  - GPU: 2s
+- `torch_chop_script`: by torch.jit.script
+  - CPU: Median 344.43 ms
+  - GPU: 1.44s
+- `torch_chop_script`: in `torch_chop_compile3.py`, with unrolled loop
+  - CPU: Median: 345.57 ms
+  - GPU: 1.46s
+- `torch_chop2_script`: by torch.jit.script
+  - CPU: Median 351.37 ms
+  - GPU: 1.44s
+  
 ### Custom C++ extensions and CUDA kernels
 Read more in [page](https://pytorch.org/tutorials/advanced/cpp_extension.html).
 The performance is not fully optimized without writing CUDA kernels...
 See tests in [torch_cjit_chop.py](torch_cjit_chop.py).
 
-### Concerns
+### Concerns in this problem
 In the for-loop based solution, we have data-dependent control flow, as `torch.linspace(X[i,0], X[i,3], Ns[i])`.
 ### A few tests
 #### torch.compile, torch.jit.script, eager mode, and numpy/numba
