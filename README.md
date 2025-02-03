@@ -5,7 +5,7 @@ Input data is an array of steps, in a size of (N, 6).
 A step, (1,6), will be divided to smaller pieces when its length larger than a threshold.
 The new steps have a length smaller than or equal to threshold.
 It is not guaranteed that each original step yields the same number of divisions given the threshold.
-### Algorithm
+### Algorithm description
 - Compute the length of each step
 - Compute the number of division for each step, given a universal threshold.
   - Steps shorter than the threshold are kept.
@@ -73,8 +73,12 @@ Tests are performed in [npnb_jit_chop.py](npnb_jit_chop.py).
   - It consists of a for-loop and concatenating the temporary arrays at the last step.
 - Function `chop_np_optimized`: 0.9392065620049834 ms for 500 runs
   - It is the vectorized version without for-loop.
-The vectorized way of `chop_np_optimized` has a performance close to compiled version. This is consistent with expectation.
-The vectorized way needs additional calculations and indexing but for-loop is in absence.
+  
+We observe:
+- The vectorized way of `chop_np_optimized` has a performance close to compiled version. This is consistent with expectation.
+  The vectorized way needs additional calculations and indexing but for-loop is in absence.
+- The version with pre-allocated array is faster than the one in which a lot of temporary arrays are created.
+  - This is opposite to torch, where the index access has bigger effects.
 
 ## Numpy and torch
 ### for-loop based indexing for one input
@@ -314,7 +318,7 @@ torch.cuda.synchronize()`, which yields 7.37 μs ± 7.67 ns per loop.
                 xs[1:]
                 ys[1:]
                 zs[1:]
-  Source file are [here](simple_test.py) and [there](simple_test3.py).
+  - Source files are [here](simple_test.py) and [there](simple_test3.py).
 1. Expectation:
   - The input is in a size (1000, 6) and (1000,).
   - For-loop based indexing appears 9 times.
@@ -437,7 +441,8 @@ def chop_seg(seg, n):
 chop = torch.vmap(chop)
 ```
 Unfortunately, function [torch.arange](https://pytorch.org/docs/stable/generated/torch.arange.html)
-and [torch.linspac](https://pytorch.org/docs/stable/generated/torch.linspace.html)e require scalar inputs, rather than a tensor, for some arguments.
+and [torch.linspac](https://pytorch.org/docs/stable/generated/torch.linspace.html)e require [scalar](https://pytorch.org/cppdocs/notes/tensor_basics.html)
+inputs, rather than a tensor, for some arguments.
 Method `torch.vmap` does not support scalar. We encounter the problem as of today.
 ```
 RuntimeError: vmap: It looks like you're calling .item() on a Tensor. We don't support vmap over calling .item() on a Tensor, please try to rewrite what you're doing with other operations. If error is occurring somewhere inside PyTorch internals, please file a bug report.
@@ -446,3 +451,91 @@ A [GitHub issue](https://github.com/pytorch/pytorch/issues/105494) is linked her
 
 A another try is to have `idxs = torch.torch(tuple(i for i in range(n+1))) / n`.
 But it will return `RuntimeError: all inputs of range must be ints, found Tensor in argument 0`.
+
+## torch and JIT
+### The active project: torch.compile
+The library
+[torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html)
+is is intended to replace
+[TorchScript](https://pytorch.org/tutorials/beginner/Intro_to_TorchScript_tutorial.html).
+It records the graph of operations and compile the graph. I copied
+information from the
+[blog](https://pytorch.org/blog/optimizing-production-pytorch-performance-with-graph-transformations/).
+> PyTorch supports two execution modes [1]: eager mode and graph
+> mode. In eager mode, operators in a model are immediately executed
+> as they are encountered. In contrast, in graph mode, operators are
+> first synthesized into a graph, > which will then be compiled and
+> executed as a whole.
+
+The decorator `torch.compile` can handle the data-dependent flow.  The
+price is to have 'graph breaks' in the code. Each condition under an
+input leads to a recompilation and graph. An example is
+[here](https://discuss.pytorch.org/t/compiling-for-loop-makes-it-run-25x-slower-than-uncompiled-version/191488).
+
+The non-pytorch type, such as python integers, are treated as
+constants and can trigger re-compilations as long as they change.
+
+An example is in the printed message from [torch_chop_compile.py](torch_chop_compile.py)
+> Elapsed time for X0X1[:8_000] 678.5413208007812 milliseconds using torch_chop_optimized_compile
+
+To check if there are re-compilations, try
+```
+TORCH_LOGS='recompiles' python script.py
+```
+It is also possible to force to compile a full graph. An exception will be thrown when 'graph breaks' present.
+```
+compiled_fn = torch.compile(fn, fullgraph=True)
+```
+
+Read more in [FAQ](https://pytorch.org/docs/stable/torch.compiler_faq.html).
+
+
+### The legacy way: TorchScript
+There are two ways to compile a graph in
+[TorchScript](https://pytorch.org/tutorials/beginner/Intro_to_TorchScript_tutorial.html).
+- trace: it trace the graph and is more friendly to python code but it
+  will give wrong results if data-dependent control flow presents.
+- script: it compile the graph using static data type and is able to
+  handle control flow. But it only works with a subset of python
+  features.
+  
+### Custom C++ extensions and CUDA kernels
+Read more in [page](https://pytorch.org/tutorials/advanced/cpp_extension.html).
+The performance is not fully optimized without writing CUDA kernels...
+See tests in [torch_cjit_chop.py](torch_cjit_chop.py).
+
+### Concerns
+In the for-loop based solution, we have data-dependent control flow, as `torch.linspace(X[i,0], X[i,3], Ns[i])`.
+### A few tests
+#### torch.compile, torch.jit.script, eager mode, and numpy/numba
+- Test data
+  - in `common_dataset.py`.
+- Test function and results
+  - Functions are in [torch_chop_compile.py](torch_chop_compile.py),
+    and [npnb_jit_chop.py](npnb_jit_chop.py), and
+    [torch_cjit_chop.py](torch_cjit_chop.py).
+  - `torch_chop`: optimized version in eager-mode using for-loop, torch.stack, torch.cat.
+    - on CPU: Median: 291.33 ms
+    - on GPU: Median: 947.02 ms
+  - `torch_chop_compile`: by `torch.compile(torch_chop)`.
+    - on CPU: Median: 293.28 ms
+    - on GPU: Median: 940.46 ms
+  - `torch_chop_script`: by `torch.jit.script(torch_chop)`.
+    - on CPU: Median: 130.87 ms
+    - on GPU: Median: 575.25 ms
+  - `torch_chop_optimized`: optimized version in a vectorized way.
+    - on CPU: Median: 815.35 us
+    - on GPU: Median: 182.52 us
+  - `torch_chop_optimized_compile`: by `torch.compile`.
+    - on CPU: Median: 528.48 us; without recompilations
+    - on GPU: Median: 143.58 us; without recompilations
+  - `torch_chop_optimized_script`: by `torch.jit.script`.
+    - on CPU: Median: 766.22 us
+    - on GPU: Median: 135.42 us
+  - `batch_chop_X0X1`: by C++ front-end, using for-loop, advance indexing and in-place manipulations
+    - on CPU: Median: 192.89 ms
+    - on GPU: Median: 1.17 s
+  - `batch_chop_X0X1_v2`: by C++ front-end, using for-loop, torch.stack, torch.cat.
+    - on CPU: 131.86 ms
+    - on GPU: Median: 624.88 ms
+    - Performance is very close to `torch_chop_script`.

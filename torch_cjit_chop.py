@@ -19,6 +19,7 @@ def chop_torch(X0X1, Ns):
         idx += size  # Move the index forward
     return result
 
+# https://discuss.pytorch.org/t/how-could-i-swtith-off-gradient-with-c-libtorch/114138/2
 batch_chop_X0X1_src = '''\
 torch::Tensor batch_chop_X0X1(const torch::Tensor& X0X1, const torch::Tensor& Ns)
 {
