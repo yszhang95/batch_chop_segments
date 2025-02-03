@@ -123,17 +123,17 @@ The vectorized way needs additional calculations and indexing but for-loop is in
 
 ### for-loop based indexing for 2D input
 1. Test function
-  ```python
+        ```python
         def idx(X):
             for i in range(len(X)):
                 X[i,0]
             return
-  ```
+        ```
 1. Test data
-  ```python
-  X = torch.rand((1000,2))
-  Y = np.random.rand(2000).reshape(1000, 2)
-  ```
+        ```python
+        X = torch.rand((1000,2))
+        Y = np.random.rand(2000).reshape(1000, 2)
+        ```
 - Test platform
   - CPU: AMD Ryzen Threadripper 7970X 32-Cores
   - GeForce RTX 4090.
